@@ -3,6 +3,7 @@ use std::fs;
 
 pub fn run() {
     let (left_list, right_list) = read_numbers("src/days/inputs/day1.txt");
+    print!("Day 1!!\n");
     part1(&left_list, &right_list);
     part2(&left_list, &right_list);
 

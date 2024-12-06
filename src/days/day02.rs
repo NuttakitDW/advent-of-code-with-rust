@@ -4,6 +4,8 @@ pub fn run() {
     // Read the input file
     let reports = read_reports("src/days/inputs/day2.txt");
 
+    print!("Day 2!!\n");
+
     // Part 1: Count safe reports
     let safe_count = reports.iter().filter(|report| is_safe(report)).count();
     println!("Part 1: The number of safe reports is: {}", safe_count);

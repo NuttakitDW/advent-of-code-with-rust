@@ -58,6 +58,7 @@ pub fn check_word(
 }
 
 pub fn run() {
+    print!("Day 3!!\n");
     let file_path = "src/days/inputs/day3.txt";
     let grid = read_input(file_path);
 

@@ -6,6 +6,7 @@ pub fn run() {
     let grid = read_input(file_path).expect("Failed to read input");
     let ans1 = part1(&grid);
     let ans2 =part2(&grid);
+    print!("Day 4!!\n");
     println!("part1: {}", ans1);
     println!("part2: {}", ans2);
 }
