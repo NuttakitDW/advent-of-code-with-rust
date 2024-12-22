@@ -1,87 +1,98 @@
-use std::fs;
-use std::io::{self, BufRead};
-
-pub fn count_xmas_occurrences(grid: Vec<Vec<char>>) -> usize {
-    let word = "XMAS";
-    let directions = vec![
-        (0, 1),   // Right
-        (0, -1),  // Left
-        (1, 0),   // Down
-        (-1, 0),  // Up
-        (1, 1),   // Diagonal down-right
-        (1, -1),  // Diagonal down-left
-        (-1, 1),  // Diagonal up-right
-        (-1, -1), // Diagonal up-left
-    ];
-
-    let rows = grid.len();
-    let cols = grid[0].len();
-    let mut count = 0;
-
-    for i in 0..rows {
-        for j in 0..cols {
-            for &(dx, dy) in &directions {
-                if check_word(&grid, word, i as isize, j as isize, dx, dy) {
-                    count += 1;
-                }
-            }
-        }
-    }
-
-    count
-}
-
-pub fn check_word(
-    grid: &Vec<Vec<char>>,
-    word: &str,
-    start_x: isize,
-    start_y: isize,
-    dx: isize,
-    dy: isize,
-) -> bool {
-    let chars: Vec<char> = word.chars().collect();
-    let mut x = start_x;
-    let mut y = start_y;
-
-    for &ch in &chars {
-        if x < 0 || y < 0 || x >= grid.len() as isize || y >= grid[0].len() as isize {
-            return false;
-        }
-        if grid[x as usize][y as usize] != ch {
-            return false;
-        }
-        x += dx;
-        y += dy;
-    }
-
-    true
-}
+use regex::Regex;
 
 pub fn run() {
-    print!("Day 3!!\n");
-    let file_path = "src/days/inputs/day3.txt";
-    let grid = read_input(file_path);
+    let input = std::fs::read_to_string("src/days/inputs/day3.txt").expect("Failed to read input");
 
-    match grid {
-        Ok(grid) => {
-            let result = count_xmas_occurrences(grid);
-            println!("Total occurrences of XMAS: {}", result);
-        }
-        Err(e) => {
-            println!("Failed to read input: {}", e);
-        }
-    }
+    // Part 1
+    let part1_result = part1(&input);
+    println!("Part 1: {}", part1_result);
+
+    // Part 2
+    part2();
 }
 
-pub fn read_input(file_path: &str) -> io::Result<Vec<Vec<char>>> {
-    let file = fs::File::open(file_path)?;
-    let reader = io::BufReader::new(file);
+fn part1(input: &str) -> i64 {
+    let re = Regex::new(r"mul\((\d+),(\d+)\)").unwrap();
+    re.captures_iter(input)
+        .map(|cap| {
+            let x: i64 = cap[1].parse().unwrap();
+            let y: i64 = cap[2].parse().unwrap();
+            x * y
+        })
+        .sum()
+}
 
-    let mut grid = Vec::new();
-    for line in reader.lines() {
-        let line = line?;
-        grid.push(line.chars().collect());
+use std::fs;
+
+/// Finds all positions of a word in the content
+fn get_positions_of_word(content: &str, word: &str) -> Vec<usize> {
+    let mut positions = Vec::new();
+    let mut previous_position = 0;
+
+    while let Some(position) = content[previous_position..].find(word) {
+        positions.push(previous_position + position);
+        previous_position += position + 1;
     }
 
-    Ok(grid)
+    positions
+}
+
+/// Finds the next position greater than `start` in a list of positions
+fn get_next_position(start: usize, positions: &[usize]) -> Option<usize> {
+    positions.iter().copied().find(|&position| position > start)
+}
+
+/// Filters instructions based on `do()` and `don't()` rules
+fn get_enabled_instructions(content: &str) -> String {
+    let chars: Vec<char> = content.chars().collect();
+    let mut result = Vec::new();
+    let mut write = true;
+
+    let dont_positions = get_positions_of_word(content, "don't()");
+    let do_positions = get_positions_of_word(content, "do()");
+
+    let mut next_dont = get_next_position(0, &dont_positions);
+    let mut next_do = None;
+
+    for (i, &ch) in chars.iter().enumerate() {
+        if Some(i) == next_dont {
+            write = false;
+            next_do = get_next_position(i, &do_positions);
+        } else if Some(i) == next_do {
+            write = true;
+            next_dont = get_next_position(i, &dont_positions);
+        }
+
+        if write {
+            result.push(ch);
+        }
+    }
+
+    result.iter().collect()
+}
+
+/// Processes the content and computes the total result
+fn get_total(content: &str) -> i64 {
+    let re = regex::Regex::new(r"mul\((\d+),(\d+)\)").unwrap();
+
+    re.captures_iter(content)
+        .map(|cap| {
+            let x: i64 = cap[1].parse().unwrap();
+            let y: i64 = cap[2].parse().unwrap();
+            x * y
+        })
+        .sum()
+}
+
+pub fn part2() {
+    let file_path = "src/days/inputs/day3.txt";
+    let content = fs::read_to_string(file_path).expect("Failed to read input file");
+
+    // Apply `do()` and `don't()` filtering logic
+    let enabled_instructions = get_enabled_instructions(&content);
+
+    // Calculate the total from valid `mul` instructions
+    let total = get_total(&enabled_instructions);
+
+    println!("Part 2 Total: {}", total);
 }
