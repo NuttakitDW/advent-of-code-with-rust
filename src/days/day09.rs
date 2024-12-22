@@ -31,36 +31,6 @@ impl Filesystem {
         Filesystem { sectors }
     }
 
-    fn get_sector(&self, index: usize) -> &Sector {
-        &self.sectors[index]
-    }
-
-    fn set_sector(&mut self, index: usize, sector: Sector) {
-        self.sectors[index] = sector;
-    }
-
-    fn get_partition(&self) -> &Vec<Sector> {
-        &self.sectors
-    }
-
-    fn get_free_space(&self) -> Vec<usize> {
-        self.sectors
-            .iter()
-            .enumerate()
-            .filter(|(_, sector)| matches!(sector, Sector::FreeSpace))
-            .map(|(index, _)| index)
-            .collect()
-    }
-
-    fn get_files(&self) -> Vec<(usize, Sector)> {
-        self.sectors
-            .iter()
-            .enumerate()
-            .filter(|(_, sector)| matches!(sector, Sector::File(_)))
-            .map(|(index, sector)| (index, sector.clone()))
-            .collect()
-    }
-
     fn get_checksum(&self) -> u64 {
         self.sectors
             .iter()
@@ -80,7 +50,7 @@ struct PerBlockDefragmenter;
 
 impl PerBlockDefragmenter {
     fn gaps_exist(filesystem: &Filesystem) -> bool {
-        let partition = filesystem.get_partition();
+        let partition = &filesystem.sectors;
         let mut gaps = 0;
 
         for i in 0..(partition.len() - 1) {
@@ -96,13 +66,84 @@ impl PerBlockDefragmenter {
 
     fn defragment(filesystem: &mut Filesystem) {
         while Self::gaps_exist(filesystem) {
-            let free_space = filesystem.get_free_space();
-            let files = filesystem.get_files();
+            let free_space = filesystem
+                .sectors
+                .iter()
+                .enumerate()
+                .filter(|(_, sector)| matches!(sector, Sector::FreeSpace))
+                .map(|(index, _)| index)
+                .collect::<Vec<_>>();
+
+            let files = filesystem
+                .sectors
+                .iter()
+                .enumerate()
+                .filter(|(_, sector)| matches!(sector, Sector::File(_)))
+                .map(|(index, sector)| (index, sector.clone()))
+                .collect::<Vec<_>>();
 
             if let Some(&free_idx) = free_space.first() {
                 if let Some(&(file_idx, ref file_data)) = files.last() {
-                    filesystem.set_sector(free_idx, file_data.clone());
-                    filesystem.set_sector(file_idx, Sector::FreeSpace);
+                    filesystem.sectors[free_idx] = file_data.clone();
+                    filesystem.sectors[file_idx] = Sector::FreeSpace;
+                }
+            }
+        }
+    }
+}
+
+struct PerFileDefragmenter;
+
+impl PerFileDefragmenter {
+    fn build_file_map(filesystem: &Filesystem) -> Vec<(u32, Vec<usize>, usize)> {
+        let mut file_map: std::collections::BTreeMap<u32, (Vec<usize>, usize)> = std::collections::BTreeMap::new();
+    
+        for (index, sector) in filesystem.sectors.iter().enumerate() {
+            if let Sector::File(file_id) = sector {
+                let entry = file_map.entry(*file_id).or_insert((Vec::new(), 0));
+                entry.0.push(index); // Add index
+                entry.1 += 1;        // Increment size
+            }
+        }
+    
+        // Convert map to a vector and unpack the inner tuple
+        let mut file_map_vec: Vec<_> = file_map
+            .into_iter()
+            .map(|(file_id, (indexes, size))| (file_id, indexes, size)) // Unpack the tuple
+            .collect();
+    
+        // Sort by descending file ID
+        file_map_vec.sort_by_key(|(file_id, _, _)| std::cmp::Reverse(*file_id));
+        file_map_vec
+    }
+    
+
+    fn is_free_space(filesystem: &Filesystem, start: usize, end: usize) -> bool {
+        for i in start..end {
+            if let Sector::File(_) = filesystem.sectors[i] {
+                return false;
+            }
+        }
+        true
+    }
+
+    fn defragment(filesystem: &mut Filesystem) {
+        let file_map = Self::build_file_map(filesystem);
+
+        for (file_id, indexes, size) in file_map {
+            let required_space = size;
+            let first_file_index = *indexes.iter().min().unwrap();
+
+            for x in 0..first_file_index {
+                if x + required_space <= filesystem.sectors.len()
+                    && Self::is_free_space(filesystem, x, x + required_space)
+                {
+                    // Move the file to this free space
+                    for (old_pos, new_pos) in indexes.iter().zip(x..(x + required_space)) {
+                        filesystem.sectors[new_pos] = filesystem.sectors[*old_pos].clone();
+                        filesystem.sectors[*old_pos] = Sector::FreeSpace;
+                    }
+                    break;
                 }
             }
         }
@@ -112,9 +153,16 @@ impl PerBlockDefragmenter {
 pub fn run() {
     println!("Day 9!!");
     let file_path = "src/days/inputs/day9.txt";
-    let mut filesystem = Filesystem::new(file_path);
 
-    PerBlockDefragmenter::defragment(&mut filesystem);
-    let checksum = filesystem.get_checksum();
-    println!("Checksum: {}", checksum);
+    // Part 1: Block-by-block defragmentation
+    let mut filesystem_part1 = Filesystem::new(file_path);
+    PerBlockDefragmenter::defragment(&mut filesystem_part1);
+    let checksum_part1 = filesystem_part1.get_checksum();
+    println!("Part 1 Checksum: {}", checksum_part1);
+
+    // Part 2: File-by-file defragmentation
+    let mut filesystem_part2 = Filesystem::new(file_path);
+    PerFileDefragmenter::defragment(&mut filesystem_part2);
+    let checksum_part2 = filesystem_part2.get_checksum();
+    println!("Part 2 Checksum: {}", checksum_part2);
 }
