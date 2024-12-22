@@ -31,6 +31,36 @@ impl Filesystem {
         Filesystem { sectors }
     }
 
+    fn get_sector(&self, index: usize) -> &Sector {
+        &self.sectors[index]
+    }
+
+    fn set_sector(&mut self, index: usize, sector: Sector) {
+        self.sectors[index] = sector;
+    }
+
+    fn get_partition(&self) -> &Vec<Sector> {
+        &self.sectors
+    }
+
+    fn get_free_space(&self) -> Vec<usize> {
+        self.sectors
+            .iter()
+            .enumerate()
+            .filter(|(_, sector)| matches!(sector, Sector::FreeSpace))
+            .map(|(index, _)| index)
+            .collect()
+    }
+
+    fn get_files(&self) -> Vec<(usize, Sector)> {
+        self.sectors
+            .iter()
+            .enumerate()
+            .filter(|(_, sector)| matches!(sector, Sector::File(_)))
+            .map(|(index, sector)| (index, sector.clone()))
+            .collect()
+    }
+
     fn get_checksum(&self) -> u64 {
         self.sectors
             .iter()
@@ -44,77 +74,35 @@ impl Filesystem {
             })
             .sum()
     }
+}
 
-    fn compact_block_by_block(&mut self) {
-        for current_index in (0..self.sectors.len()).rev() {
-            if let Sector::File(file_id) = self.sectors[current_index] {
-                // Find the leftmost free space
-                if let Some(target_index) = self.sectors.iter().position(|s| matches!(s, Sector::FreeSpace)) {
-                    // Move block to free space
-                    self.sectors[target_index] = Sector::File(file_id);
-                    self.sectors[current_index] = Sector::FreeSpace;
+struct PerBlockDefragmenter;
+
+impl PerBlockDefragmenter {
+    fn gaps_exist(filesystem: &Filesystem) -> bool {
+        let partition = filesystem.get_partition();
+        let mut gaps = 0;
+
+        for i in 0..(partition.len() - 1) {
+            if matches!(partition[i], Sector::File(_)) && matches!(partition[i + 1], Sector::FreeSpace) {
+                gaps += 1;
+                if gaps > 1 {
+                    return true;
                 }
             }
         }
+        false
     }
 
-    fn find_free_spans(&self) -> Vec<(usize, usize)> {
-        let mut spans = Vec::new();
-        let mut start = None;
+    fn defragment(filesystem: &mut Filesystem) {
+        while Self::gaps_exist(filesystem) {
+            let free_space = filesystem.get_free_space();
+            let files = filesystem.get_files();
 
-        for (i, sector) in self.sectors.iter().enumerate() {
-            match (start, sector) {
-                (None, Sector::FreeSpace) => start = Some(i),
-                (Some(s), Sector::File(_)) => {
-                    spans.push((s, i - 1));
-                    start = None;
-                }
-                _ => {}
-            }
-        }
-
-        if let Some(s) = start {
-            spans.push((s, self.sectors.len() - 1));
-        }
-
-        spans
-    }
-
-    fn compact_file_by_file(&mut self) {
-        let mut files = Vec::new();
-        let mut file_id = None;
-
-        // Collect all file IDs and their positions
-        for (i, sector) in self.sectors.iter().enumerate() {
-            match (file_id, sector) {
-                (None, Sector::File(id)) => {
-                    file_id = Some(*id);
-                    files.push((*id, vec![i]));
-                }
-                (Some(id), Sector::File(cur_id)) if id == *cur_id => {
-                    files.last_mut().unwrap().1.push(i);
-                }
-                (_, _) => file_id = None,
-            }
-        }
-
-        // Sort files by decreasing file ID
-        files.sort_by_key(|(id, _)| std::cmp::Reverse(*id));
-
-        // Move files to leftmost free space if possible
-        for (id, positions) in files {
-            let file_length = positions.len();
-            let free_spans = self.find_free_spans();
-
-            for (start, end) in free_spans {
-                if (end - start + 1) >= file_length {
-                    let target_positions: Vec<usize> = (start..(start + file_length)).collect();
-
-                    for (&old, &new) in positions.iter().zip(target_positions.iter()) {
-                        self.sectors[new] = Sector::File(id);
-                        self.sectors[old] = Sector::FreeSpace;
-                    }
-                    break;
+            if let Some(&free_idx) = free_space.first() {
+                if let Some(&(file_idx, ref file_data)) = files.last() {
+                    filesystem.set_sector(free_idx, file_data.clone());
+                    filesystem.set_sector(file_idx, Sector::FreeSpace);
                 }
             }
         }
@@ -124,16 +112,9 @@ impl Filesystem {
 pub fn run() {
     println!("Day 9!!");
     let file_path = "src/days/inputs/day9.txt";
+    let mut filesystem = Filesystem::new(file_path);
 
-    // Part 1: Block-by-block compaction
-    let mut filesystem_part1 = Filesystem::new(file_path);
-    filesystem_part1.compact_block_by_block();
-    let checksum_part1 = filesystem_part1.get_checksum();
-    println!("Part 1 Checksum: {}", checksum_part1);
-
-    // Part 2: File-by-file compaction
-    let mut filesystem_part2 = Filesystem::new(file_path);
-    filesystem_part2.compact_file_by_file();
-    let checksum_part2 = filesystem_part2.get_checksum();
-    println!("Part 2 Checksum: {}", checksum_part2);
+    PerBlockDefragmenter::defragment(&mut filesystem);
+    let checksum = filesystem.get_checksum();
+    println!("Checksum: {}", checksum);
 }
