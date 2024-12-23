@@ -29,6 +29,7 @@ fn main() {
         "12" => days::day12::run(),
         "13" => days::day13::run(),
         "14" => days::day14::run(),
+        "14p2" => days::day14p2::run(),
         "15" => days::day15::run(),
         "16" => days::day16::run(),
         "17" => days::day17::run(),
