@@ -1,137 +1,97 @@
 use std::fs;
 
-type Position = (usize, usize);
+fn parse_input(input: &str) -> (Vec<Vec<char>>, Vec<char>, (usize, usize)) {
+    let parts: Vec<&str> = input.split("\n\n").collect();
+    let grid_input = parts[0];
+    let directions: Vec<char> = parts[1].chars().collect();
 
-#[derive(Debug, Clone, Copy)]
-enum Tile {
-    Wall,
-    Empty,
-    Box,
-    Robot,
-}
+    let mut grid: Vec<Vec<char>> = grid_input.lines().map(|line| line.chars().collect()).collect();
+    let mut robot = (0, 0);
 
-fn parse_input(file_path: &str) -> (Vec<Vec<Tile>>, Vec<char>, Position) {
-    let input = fs::read_to_string(file_path).expect("Failed to read input file");
-    let mut grid = Vec::new();
-    let mut movements = Vec::new();
-    let mut robot_position = (0, 0);
-
-    for (row_idx, line) in input.lines().enumerate() {
-        if line.starts_with('#') {
-            let mut row = Vec::new();
-            for (col_idx, ch) in line.chars().enumerate() {
-                match ch {
-                    '#' => row.push(Tile::Wall),
-                    '.' => row.push(Tile::Empty),
-                    'O' => row.push(Tile::Box),
-                    '@' => {
-                        robot_position = (row_idx, col_idx);
-                        row.push(Tile::Robot);
-                    }
-                    _ => {}
-                }
+    for (i, row) in grid.iter_mut().enumerate() {
+        for (j, cell) in row.iter_mut().enumerate() {
+            if *cell == '@' {
+                robot = (i, j);
+                *cell = '.'; // Replace robot's initial position with empty
             }
-            grid.push(row);
-        } else {
-            movements.extend(line.chars());
         }
     }
 
-    (grid, movements, robot_position)
+    (grid, directions, robot)
 }
 
-fn simulate_movements(
-    mut grid: Vec<Vec<Tile>>,
-    movements: Vec<char>,
-    mut robot_position: Position,
-) -> Vec<Vec<Tile>> {
-    let directions = [
-        ('^', (-1, 0)), // Up
-        ('v', (1, 0)),  // Down
-        ('<', (0, -1)), // Left
-        ('>', (0, 1)),  // Right
-    ];
+fn simulate(grid: &mut Vec<Vec<char>>, directions: &[char], mut robot: (usize, usize)) -> i32 {
+    let (m, n) = (grid.len(), grid[0].len());
 
-    for movement in movements {
-        let (dx, dy) = directions
-            .iter()
-            .find(|&&(dir, _)| dir == movement)
-            .map(|&(_, d)| d)
-            .unwrap_or((0, 0));
-
-        let new_robot_pos = (
-            (robot_position.0 as isize + dx) as usize,
-            (robot_position.1 as isize + dy) as usize,
-        );
-
-        match grid.get(new_robot_pos.0).and_then(|row| row.get(new_robot_pos.1)) {
-            Some(Tile::Empty) => {
-                grid[robot_position.0][robot_position.1] = Tile::Empty;
-                grid[new_robot_pos.0][new_robot_pos.1] = Tile::Robot;
-                robot_position = new_robot_pos;
+    for &d in directions {
+        let (i, j) = robot;
+        match d {
+            '<' => {
+                let mut k = j as isize - 1;
+                while k >= 0 && grid[i][k as usize] == 'O' {
+                    k -= 1;
+                }
+                if k >= 0 && grid[i][k as usize] == '.' {
+                    // Update positions
+                    grid[i][k as usize] = 'O';
+                    grid[i][j - 1] = '.';
+                    robot = (i, j - 1);
+                }
             }
-            Some(Tile::Box) => {
-                let new_box_pos = (
-                    (new_robot_pos.0 as isize + dx) as usize,
-                    (new_robot_pos.1 as isize + dy) as usize,
-                );
-
-                if matches!(grid.get(new_box_pos.0).and_then(|row| row.get(new_box_pos.1)), Some(Tile::Empty)) {
-                    grid[new_box_pos.0][new_box_pos.1] = Tile::Box;
-                    grid[new_robot_pos.0][new_robot_pos.1] = Tile::Robot;
-                    grid[robot_position.0][robot_position.1] = Tile::Empty;
-                    robot_position = new_robot_pos;
+            '>' => {
+                let mut k = j + 1;
+                while k < n && grid[i][k] == 'O' {
+                    k += 1;
+                }
+                if k < n && grid[i][k] == '.' {
+                    grid[i][k] = 'O';
+                    grid[i][j + 1] = '.';
+                    robot = (i, j + 1);
+                }
+            }
+            '^' => {
+                let mut k = i as isize - 1;
+                while k >= 0 && grid[k as usize][j] == 'O' {
+                    k -= 1;
+                }
+                if k >= 0 && grid[k as usize][j] == '.' {
+                    grid[k as usize][j] = 'O';
+                    grid[i - 1][j] = '.';
+                    robot = (i - 1, j);
+                }
+            }
+            'v' => {
+                let mut k = i + 1;
+                while k < m && grid[k][j] == 'O' {
+                    k += 1;
+                }
+                if k < m && grid[k][j] == '.' {
+                    grid[k][j] = 'O';
+                    grid[i + 1][j] = '.';
+                    robot = (i + 1, j);
                 }
             }
             _ => {}
         }
     }
 
-    grid
-}
-
-fn calculate_gps(grid: &[Vec<Tile>]) -> i32 {
-    let mut gps_sum = 0;
-
-    for (row_idx, row) in grid.iter().enumerate() {
-        for (col_idx, tile) in row.iter().enumerate() {
-            if let Tile::Box = tile {
-                gps_sum += 100 * row_idx as i32 + col_idx as i32;
+    // Calculate GPS sum
+    let mut total = 0;
+    for (i, row) in grid.iter().enumerate() {
+        for (j, &cell) in row.iter().enumerate() {
+            if cell == 'O' {
+                total += 100 * i as i32 + j as i32;
             }
         }
     }
 
-    gps_sum
-}
-
-fn print_grid(grid: &[Vec<Tile>]) {
-    for row in grid {
-        for tile in row {
-            let symbol = match tile {
-                Tile::Wall => '#',
-                Tile::Empty => '.',
-                Tile::Box => 'O',
-                Tile::Robot => '@',
-            };
-            print!("{}", symbol);
-        }
-        println!();
-    }
-    println!();
+    total
 }
 
 pub fn run() {
-    let file_path = "src/days/inputs/day15.txt"; // Update with your actual input file path
-    let (grid, movements, robot_position) = parse_input(file_path);
+    let input = fs::read_to_string("src/days/inputs/day15.txt").expect("Failed to read input file");
+    let (mut grid, directions, robot) = parse_input(&input);
 
-    println!("Initial State:");
-    print_grid(&grid);
-
-    let final_grid = simulate_movements(grid, movements, robot_position);
-
-    println!("Final State:");
-    print_grid(&final_grid);
-
-    let gps_sum = calculate_gps(&final_grid);
-    println!("Sum of GPS coordinates: {}", gps_sum);
+    let result = simulate(&mut grid, &directions, robot);
+    println!("Sum of GPS coordinates: {}", result);
 }
