@@ -177,77 +177,79 @@ fn flood_fill_and_count_sides(
 }
 
 
-pub fn count_sides(
-    region_cells: &HashSet<(usize, usize)>, 
-    grid: &[Vec<char>], 
-    plant_type: char
+fn count_sides(
+    region_cells: &HashSet<(usize, usize)>,
+    _grid: &[Vec<char>],
+    plant_type: char,
 ) -> u32 {
-    let rows = grid.len();
-    let cols = grid[0].len();
-
-    // Directions for north, south, east, west
-    let directions = [
-        (0, -1),  // North
-        (0, 1),   // South
-        (-1, 0),  // West
-        (1, 0),   // East
-    ];
 
     let mut sides = 0;
-    let mut visited_edges = HashSet::new(); // Track counted edges
 
-    for &(x, y) in region_cells {
-        for &(dx, dy) in &directions {
-            let nx = x as isize + dx;
-            let ny = y as isize + dy;
+    // Iterate through each cell in the region
+    for &(r, c) in region_cells {
+        // Define neighbors
+        let north = (r as isize - 1, c as isize);
+        let south = (r as isize + 1, c as isize);
+        let west = (r as isize, c as isize - 1);
+        let east = (r as isize, c as isize + 1);
+        let nw = (r as isize - 1, c as isize - 1);
+        let sw = (r as isize + 1, c as isize - 1);
+        let ne = (r as isize - 1, c as isize + 1);
 
-            let current_cell = (x, y);
+        // Check each edge
+        if !region_cells.contains(&(north.0 as usize, north.1 as usize)) {
+            // North edge
+            let same_edge = region_cells.contains(&(west.0 as usize, west.1 as usize))
+                && !region_cells.contains(&(nw.0 as usize, nw.1 as usize));
+            if !same_edge {
+                sides += 1;
+                println!(
+                    "North edge counted for cell ({}, {}) | Plant type '{}'",
+                    r, c, plant_type
+                );
+            }
+        }
 
-            if nx < 0 || ny < 0 || nx >= rows as isize || ny >= cols as isize {
-                // Out of bounds - external edge
-                let normalized_edge = normalize_edge(current_cell, (nx, ny));
+        if !region_cells.contains(&(south.0 as usize, south.1 as usize)) {
+            // South edge
+            let same_edge = region_cells.contains(&(west.0 as usize, west.1 as usize))
+                && !region_cells.contains(&(sw.0 as usize, sw.1 as usize));
+            if !same_edge {
+                sides += 1;
+                println!(
+                    "South edge counted for cell ({}, {}) | Plant type '{}'",
+                    r, c, plant_type
+                );
+            }
+        }
 
-                if !visited_edges.contains(&normalized_edge) {
-                    visited_edges.insert(normalized_edge);
-                    sides += 1;
+        if !region_cells.contains(&(west.0 as usize, west.1 as usize)) {
+            // West edge
+            let same_edge = region_cells.contains(&(north.0 as usize, north.1 as usize))
+                && !region_cells.contains(&(nw.0 as usize, nw.1 as usize));
+            if !same_edge {
+                sides += 1;
+                println!(
+                    "West edge counted for cell ({}, {}) | Plant type '{}'",
+                    r, c, plant_type
+                );
+            }
+        }
 
-                    println!(
-                        "Edge counted: {:?} (out of bounds) | Plant type at {:?}: '{}'",
-                        normalized_edge, (x, y), plant_type
-                    );
-                }
-            } else {
-                let neighbor_cell = (nx as usize, ny as usize);
-                let neighbor_type = grid[nx as usize][ny as usize];
-
-                if neighbor_type != plant_type {
-                    // Neighbor is not the same plant type - external edge
-                    let normalized_edge = normalize_edge(current_cell, (nx, ny));
-
-                    if !visited_edges.contains(&normalized_edge) {
-                        visited_edges.insert(normalized_edge);
-                        sides += 1;
-
-                        println!(
-                            "Edge counted: {:?} (neighbor: {:?} is '{}') | Plant type at {:?}: '{}'",
-                            normalized_edge, neighbor_cell, neighbor_type, (x, y), plant_type
-                        );
-                    }
-                }
+        if !region_cells.contains(&(east.0 as usize, east.1 as usize)) {
+            // East edge
+            let same_edge = region_cells.contains(&(north.0 as usize, north.1 as usize))
+                && !region_cells.contains(&(ne.0 as usize, ne.1 as usize));
+            if !same_edge {
+                sides += 1;
+                println!(
+                    "East edge counted for cell ({}, {}) | Plant type '{}'",
+                    r, c, plant_type
+                );
             }
         }
     }
 
     println!("Total sides for plant type '{}': {}", plant_type, sides);
     sides
-}
-
-// Normalize an edge so that (a, b) == (b, a)
-fn normalize_edge(a: (usize, usize), b: (isize, isize)) -> ((usize, usize), (usize, usize)) {
-    let b = (b.0.max(0) as usize, b.1.max(0) as usize);
-    if a <= b {
-        (a, b)
-    } else {
-        (b, a)
-    }
 }
