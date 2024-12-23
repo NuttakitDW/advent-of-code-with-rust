@@ -1,83 +1,80 @@
-use std::collections::HashMap;
-
-const WIDTH: i32 = 101;
-const HEIGHT: i32 = 103;
-
-#[derive(Debug)]
-struct Robot {
-    position: (i32, i32),
-    velocity: (i32, i32),
-}
-
-impl Robot {
-    fn new(x: i32, y: i32, vx: i32, vy: i32) -> Self {
-        Self {
-            position: (x, y),
-            velocity: (vx, vy),
-        }
-    }
-
-    fn update_position(&mut self) {
-        self.position.0 = (self.position.0 + self.velocity.0).rem_euclid(WIDTH);
-        self.position.1 = (self.position.1 + self.velocity.1).rem_euclid(HEIGHT);
-    }
-}
-
-fn calculate_safety_factor(robots: &mut Vec<Robot>, seconds: i32) -> i32 {
-    let mut grid = HashMap::new();
-
-    // Update positions after the specified time
-    for robot in robots.iter_mut() {
-        for _ in 0..seconds {
-            robot.update_position();
-        }
-        *grid.entry(robot.position).or_insert(0) += 1;
-    }
-
-    // Count robots in each quadrant
-    let mut quadrants = [0; 4];
-    for (&(x, y), &count) in &grid {
-        if x == WIDTH / 2 || y == HEIGHT / 2 {
-            continue; // Skip robots on the middle lines
-        }
-        if x < WIDTH / 2 && y < HEIGHT / 2 {
-            quadrants[0] += count; // Top-left
-        } else if x >= WIDTH / 2 && y < HEIGHT / 2 {
-            quadrants[1] += count; // Top-right
-        } else if x < WIDTH / 2 && y >= HEIGHT / 2 {
-            quadrants[2] += count; // Bottom-left
-        } else {
-            quadrants[3] += count; // Bottom-right
-        }
-    }
-
-    // Calculate the safety factor
-    quadrants.iter().product()
-}
+use std::fs;
 
 pub fn run() {
-    let input = vec![
-        ((0, 4), (3, -3)),
-        ((6, 3), (-1, -3)),
-        ((10, 3), (-1, 2)),
-        ((2, 0), (2, -1)),
-        ((0, 0), (1, 3)),
-        ((3, 0), (-2, -2)),
-        ((7, 6), (-1, -3)),
-        ((3, 0), (-1, -2)),
-        ((9, 3), (2, 3)),
-        ((7, 3), (-1, 2)),
-        ((2, 4), (2, -3)),
-        ((9, 5), (-3, -3)),
-    ];
+    let file_path = "src/days/inputs/day14.txt";
+    let robots = read_input(file_path);
 
-    // Initialize robots
-    let mut robots: Vec<Robot> = input
-        .into_iter()
-        .map(|((x, y), (vx, vy))| Robot::new(x, y, vx, vy))
-        .collect();
+    let width = 101;
+    let height = 103;
+    let time = 100;
 
-    // Calculate the safety factor after 100 seconds
-    let safety_factor = calculate_safety_factor(&mut robots, 100);
-    println!("Safety Factor: {}", safety_factor);
+    let positions = simulate_positions(&robots, width, height, time);
+    let safety_factor = calculate_safety_factor(&positions, width, height);
+
+    println!("Safety Factor after {} seconds: {}", time, safety_factor);
+}
+
+fn read_input(file_path: &str) -> Vec<((i32, i32), (i32, i32))> {
+    let input = fs::read_to_string(file_path).expect("Failed to read input file");
+    input
+        .lines()
+        .map(|line| {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            let pos = parts[0]
+                .strip_prefix("p=")
+                .unwrap()
+                .split(',')
+                .map(|x| x.parse::<i32>().unwrap())
+                .collect::<Vec<_>>();
+            let vel = parts[1]
+                .strip_prefix("v=")
+                .unwrap()
+                .split(',')
+                .map(|x| x.parse::<i32>().unwrap())
+                .collect::<Vec<_>>();
+            ((pos[0], pos[1]), (vel[0], vel[1]))
+        })
+        .collect()
+}
+
+fn simulate_positions(
+    robots: &Vec<((i32, i32), (i32, i32))>,
+    width: i32,
+    height: i32,
+    time: i32,
+) -> Vec<(i32, i32)> {
+    robots
+        .iter()
+        .map(|&((x, y), (vx, vy))| {
+            (
+                ((x + vx * time) % width + width) % width, // Handle negative mod
+                ((y + vy * time) % height + height) % height,
+            )
+        })
+        .collect()
+}
+
+fn calculate_safety_factor(positions: &Vec<(i32, i32)>, width: i32, height: i32) -> i32 {
+    let mid_x = width / 2;
+    let mid_y = height / 2;
+
+    let mut quadrants = [0, 0, 0, 0]; // Q1, Q2, Q3, Q4
+
+    for &(x, y) in positions {
+        if x == mid_x || y == mid_y {
+            continue; // Exclude robots in the middle rows or columns
+        }
+
+        if x < mid_x && y < mid_y {
+            quadrants[0] += 1; // Q1
+        } else if x > mid_x && y < mid_y {
+            quadrants[1] += 1; // Q2
+        } else if x < mid_x && y > mid_y {
+            quadrants[2] += 1; // Q3
+        } else if x > mid_x && y > mid_y {
+            quadrants[3] += 1; // Q4
+        }
+    }
+
+    quadrants.iter().product()
 }
